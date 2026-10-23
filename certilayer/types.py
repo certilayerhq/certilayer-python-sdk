@@ -9,12 +9,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Literal
+from typing import Literal, Optional
 
-
-# ---------------------------------------------------------------------------
-# Verdict enum
-# ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
 # Key type helpers
@@ -37,6 +33,10 @@ def is_public_key(key: str) -> bool:
     """Return True if key is a valid public key (safe for browser/mobile)."""
     return key.startswith(KeyPrefixes.PUBLIC_LIVE) or key.startswith(KeyPrefixes.PUBLIC_TEST)
 
+
+# ---------------------------------------------------------------------------
+# Verdict enum
+# ---------------------------------------------------------------------------
 
 class HCSVerdict(str, Enum):
     """
@@ -69,17 +69,16 @@ class VerifyResult:
     Full verification result returned by :meth:`CertiLayerClient.verify_session`.
 
     Attributes:
-        score:          Human Confidence Score in [0.0, 1.0].
-        verdict:        Verdict derived from score thresholds.
-        session_id:     Matches the sessionId from the mobile/web SDK.
-        scored_at:      UTC ISO-8601 timestamp of score computation.
-        session_active: True if the session is still open.
+        score:      Human Confidence Score in [0.0, 1.0].
+        verdict:    Verdict derived from score thresholds.
+        session_id: Matches the sessionId from the mobile/web SDK.
+        scored_at:  UTC ISO-8601 timestamp of score computation.
     """
 
-    score:          float
-    verdict:        HCSVerdict
-    session_id:     str
-    scored_at:      str
+    score:      float
+    verdict:    HCSVerdict
+    session_id: str
+    scored_at:  str
 
     _WIRE_VERDICT_MAP = {
         "HumanVerified": HCSVerdict.HUMAN_VERIFIED,
@@ -92,10 +91,9 @@ class VerifyResult:
         """
         Construct a VerifyResult from a raw L8 API response dict.
 
-        :param data: Parsed JSON response from /v1/session/:id — real wire
-                      format uses snake_case keys and PascalCase verdict
-                      strings, translated here into this SDK's public shape.
-        :returns: VerifyResult instance
+        The wire format uses snake_case keys and PascalCase verdict strings;
+        they are translated here into this SDK's public shape. Unknown
+        verdicts map to SYNTHETIC.
         """
         return cls(
             score      = float(data["hcs_score"]),
@@ -109,24 +107,26 @@ class VerifyResult:
 class QuickCheckResult:
     """
     Lightweight result from :meth:`CertiLayerClient.quick_check`.
-    Use when you only need a pass/fail gate, not full session metadata.
 
     Attributes:
-        score:   Human Confidence Score in [0.0, 1.0].
-        verdict: Verdict derived from score thresholds.
-        passed:  True if score >= the minScore threshold.
+        score:    Human Confidence Score in [0.0, 1.0].
+        verdict:  Verdict derived from score thresholds.
+        passed:   True only if score >= min_score AND verdict is not SYNTHETIC.
+        degraded: True when the guard let the request through WITHOUT a real
+                  verification (fail_open during a CertiLayer outage). The
+                  score/verdict are placeholders in that case.
     """
 
-    score:   float
-    verdict: HCSVerdict
-    passed:  bool
+    score:    float
+    verdict:  HCSVerdict
+    passed:   bool
+    degraded: bool = False
 
 
 # ---------------------------------------------------------------------------
 # Error types
 # ---------------------------------------------------------------------------
 
-# Literal union of all machine-readable error codes
 CertiLayerErrorCode = Literal[
     "INVALID_API_KEY",
     "SESSION_NOT_FOUND",
@@ -145,30 +145,22 @@ class CertiLayerError(Exception):
     Raised by the CertiLayer SDK on all non-success outcomes.
 
     Attributes:
-        message: Human-readable error description.
-        code:    Machine-readable error code for programmatic handling.
-        cause:   Original exception that triggered this error, if any.
-
-    Example::
-
-        try:
-            result = await client.verify_session(session_id)
-        except CertiLayerError as e:
-            if e.code == "SESSION_NOT_FOUND":
-                # session expired before backend could verify
-                return JSONResponse({"error": "session_expired"}, status_code=400)
-            raise
+        code:        Machine-readable error code for programmatic handling.
+        cause:       Original exception that triggered this error, if any.
+        status_code: HTTP status of the API response, if there was one.
     """
 
     def __init__(
         self,
         message: str,
         code: CertiLayerErrorCode,
-        cause: BaseException | None = None,
+        cause: Optional[BaseException] = None,
+        status_code: Optional[int] = None,
     ) -> None:
         super().__init__(message)
-        self.code  = code
-        self.cause = cause
+        self.code        = code
+        self.cause       = cause
+        self.status_code = status_code
 
     def __repr__(self) -> str:
         return f"CertiLayerError(code={self.code!r}, message={str(self)!r})"

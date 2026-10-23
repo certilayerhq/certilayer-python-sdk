@@ -5,7 +5,7 @@ Verify human sessions server-side in 3 lines:
 
     from certilayer import CertiLayerClient
 
-    client = CertiLayerClient(api_key="cl_live_...")
+    client = CertiLayerClient(api_key="certilayer_live_sk_...")
     result = await client.verify_session(session_id)
 
     if result.verdict == "synthetic":
@@ -30,4 +30,4 @@ __all__ = [
     "CertiLayerErrorCode",
 ]
 
-__version__ = "1.0.0"
+from ._version import __version__

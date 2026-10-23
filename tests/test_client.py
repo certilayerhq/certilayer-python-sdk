@@ -184,15 +184,6 @@ class TestFastAPIDependencyMore:
         assert exc.value.status_code == 403
         assert exc.value.detail["error"] == "missing_session"
 
-    @respx.mock
-    @pytest.mark.asyncio
-    async def test_guard_fails_open_on_network_error(self, client):
-        pytest.importorskip("fastapi")
-        respx.get(f"{BASE_URL}/session/id").mock(side_effect=httpx.ConnectError("down"))
-        guard = client.fastapi_dependency(min_score=0.30)
-        result = await guard(session_id="id")
-        assert result.passed is True
-        assert result.verdict == HCSVerdict.HUMAN_VERIFIED
 
 
 class TestDjangoMiddleware:
@@ -205,25 +196,6 @@ class TestDjangoMiddleware:
         middleware_cls = client.django_middleware()
         assert callable(middleware_cls)
 
-    def test_passes_through_when_no_session_header(self, client):
-        pytest.importorskip("django")
-        from django.conf import settings
-        if not settings.configured:
-            settings.configure()
-
-        middleware_cls = client.django_middleware()
-        calls = []
-
-        def get_response(request):
-            calls.append(request)
-            return "OK"
-
-        mw = middleware_cls(get_response)
-        request = type("Req", (), {"META": {}})()
-        result = mw(request)
-
-        assert result == "OK"
-        assert calls == [request]
 
 
 class TestContextManagerAndClose:

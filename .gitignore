@@ -1,4 +1,9 @@
 pytest_cache/
 __pycache__/
 certilayer.egg-info/
-coverage
+coverage.coverage
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.venv/
